@@ -9,10 +9,8 @@
 #include <iomanip>
 
 #ifndef NUMT
-#define NUMT -1   //Number of threads to be used in the for loop
+#define NUMT -1   // Number of threads to be used in the for loop
 #endif
-
-
 
 #ifndef NUMPLANETS
 #define NUMPLANETS 150
@@ -21,6 +19,7 @@
 #ifndef NUMSTARS
 #define NUMSTARS 150
 #endif
+
 // Define constants
 const double G = 6.67430e-11; // Gravitational constant
 
@@ -164,7 +163,7 @@ void displayLoadingBar(int step, int steps) {
 double randomInRange(double min, double max) {
     return min + static_cast<double>(std::rand()) / RAND_MAX * (max - min);
 }
-void generate_celestial_body(std::vector<PointMass>& masses, int count, double mass_min, double mass_max, double distance_min, double distance_max, const PointMass& reference_body) {
+void generate_celestial_body(std::vector<PointMass>& masses, int count, double mass_min, double mass_max, double distance_min, double distance_max) {
     for (int i = 0; i < count; ++i) {
         std::vector<double> position(3);
         position[0] = randomInRange(distance_min, distance_max);
@@ -184,8 +183,6 @@ void generate_celestial_body(std::vector<PointMass>& masses, int count, double m
         double mass = randomInRange(mass_min, mass_max);
         PointMass newBody(mass, position, velocity, force, angularVelocity, torque, momentOfInertia);
 
-        setOrbitalVelocity(newBody, reference_body);
-
         masses.push_back(newBody);
     }
 }
@@ -203,9 +200,7 @@ int main() {
     std::srand(static_cast<unsigned int>(std::time(NULL)));
 
     // Define control variables as ranges
-    double randsizesun_min = 1.0e24, randsizesun_max = 2.0e25;
     double randsizeplanet_min = 1.0e25, randsizeplanet_max = 1.0e26;
-    double randdistancesun_min = 2.0e9, randdistancesun_max = 2.0e12;
     double randdistancesplanet_min = 1.0e7, randdistancesplanet_max = 2.0e12;
     double randdistancesstar_min = 1.0e7, randdistancesstar_max = 2.0e12;
     double randsizestar_min = 1.0e24, randsizestar_max = 2.0e35;
@@ -213,35 +208,15 @@ int main() {
     // Define the point masses
     std::vector<PointMass> masses;
 
-    double sunMass = randomInRange(randsizesun_min, randsizesun_max); // Random mass of the sun
-    double distance = randomInRange(randdistancesun_min, randdistancesun_max); // Random distance between the two suns
-    double velocity = std::sqrt(G * sunMass * 0.7 * (distance / 2)); // Orbital velocity for each sun
-
-    std::vector<double> sun1Position = {-distance / 2, 0.0, 0.0};
-    std::vector<double> sun1Velocity = {0.0, velocity, 0.0};
-    std::vector<double> sun2Position = {distance / 2, 0.0, 0.0};
-    std::vector<double> sun2Velocity = {0.0, -velocity, 0.0};
-
-    std::vector<double> sunForce(3, 0.0);
-    std::vector<double> sunAngularVelocity(3, 0.0);
-    std::vector<double> sunTorque(3, 0.0);
-    double sunMomentOfInertia = 1.0e40; // Arbitrary large moment of inertia
-
-    PointMass sun1(sunMass, sun1Position, sun1Velocity, sunForce, sunAngularVelocity, sunTorque, sunMomentOfInertia);
-    masses.push_back(sun1);
-
-    PointMass sun2(sunMass, sun2Position, sun2Velocity, sunForce, sunAngularVelocity, sunTorque, sunMomentOfInertia);
-    masses.push_back(sun2);
-
-    generate_celestial_body(masses, NUMPLANETS, randsizeplanet_min, randsizeplanet_max, randdistancesplanet_min, randdistancesplanet_max, sun1);
-    generate_celestial_body(masses, NUMSTARS, randsizestar_min, randsizestar_max, randdistancesstar_min, randdistancesstar_max, sun1);
+    generate_celestial_body(masses, NUMPLANETS, randsizeplanet_min, randsizeplanet_max, randdistancesplanet_min, randdistancesplanet_max);
+    generate_celestial_body(masses, NUMSTARS, randsizestar_min, randsizestar_max, randdistancesstar_min, randdistancesstar_max);
 
     // Open a file to write the simulation data
     std::ofstream outFile("simulation_data.txt");
 
     // Simulation parameters
-    double dt = 0.01; // Time step in seconds
-    int steps = 500; // Number of steps to simulate
+    double dt = 1; // Time step in seconds
+    int steps = 1000; // Number of steps to simulate
 
     // Main simulation loop
     for (int step = 0; step < steps; ++step) {
