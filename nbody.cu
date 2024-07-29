@@ -14,11 +14,19 @@
 #endif
 
 #ifndef NUMPLANETS
-#define NUMPLANETS 4000
+#define NUMPLANETS 10
 #endif
 
 #ifndef NUMSTARS
-#define NUMSTARS 500
+#define NUMSTARS 30
+#endif
+
+#ifndef NUMSMALLBLACKHOLES
+#define NUMSMALLBLACKHOLES 2
+#endif
+
+#ifndef NUMBLACKHOLES
+#define NUMBLACKHOLES 1
 #endif
 
 #define G 6.67430e-11
@@ -113,9 +121,34 @@ __global__ void updateKinematics(PointMass *masses, int n, double dt) {
     masses[i].angularVelocity[2] += masses[i].torque[2] / masses[i].momentOfInertia * dt;
 }
 
-void generate_galaxy(std::vector<PointMass>& masses, int numPlanets, int numStars, const double* center, double radius, double mass_min, double mass_max, const double* initialVelocity = nullptr) {
+
+double randomInRange(double min, double max) {
+    return min + static_cast<double>(rand()) / RAND_MAX * (max - min);
+}
+
+void generateSpiralPosition(double* position, const double* center, double radius, double height, int numArms) {
+    double theta = randomInRange(0, 2 * M_PI); // Random angle
+    double armOffset = randomInRange(0, 2 * M_PI / numArms); // Offset to create multiple arms
+    double r = radius * sqrt(randomInRange(0, 1)); // Higher probability near center
+
+    // Logarithmic spiral parameters
+    double a = 1.0;
+    double b = 0.3; // Controls the tightness of the spiral
+
+    double x = r * cos(theta + armOffset) * exp(b * theta);
+    double y = r * sin(theta + armOffset) * exp(b * theta);
+
+    // Add a perturbation to simulate spiral arms
+    double perturbation = 0.005 * radius * sin(numArms * theta);
+
+    position[0] = center[0] + x + perturbation;
+    position[1] = center[1] + y + perturbation;
+    position[2] = center[2] + randomInRange(-height, height); // Flatten in Z dimension
+}
+
+void generate_galaxy(std::vector<PointMass>& masses, int numPlanets, int numStars, int numSmallBlackHoles, int numBlackHoles, double* center, double radius, double mass_min, double mass_max, int numArms, const double* initialVelocity = nullptr) {
     int startIdx = masses.size();
-    int totalBodies = numPlanets + numStars;
+    int totalBodies = numPlanets + numStars + numSmallBlackHoles;
     double totalMass = 0.0;
     double mass;
 
@@ -126,11 +159,7 @@ void generate_galaxy(std::vector<PointMass>& masses, int numPlanets, int numStar
     // Generate planets
     for (int i = 0; i < numPlanets; ++i) {
         double position[3];
-        double distance = randomInRange(0, radius);
-        double angle = randomInRange(0, 2 * M_PI);
-        position[0] = center[0] + distance * cos(angle);
-        position[1] = center[1] + distance * sin(angle);
-        position[2] = center[2] + randomInRange(-radius, radius);
+        generateSpiralPosition(position, center, radius, radius * 0.1, numArms);
 
         double velocity[3] = {0.0, 0.0, 0.0};
         double force[3] = {0.0, 0.0, 0.0};
@@ -144,14 +173,10 @@ void generate_galaxy(std::vector<PointMass>& masses, int numPlanets, int numStar
         masses.push_back(PointMass{mass, {position[0], position[1], position[2]}, {velocity[0], velocity[1], velocity[2]}, {force[0], force[1], force[2]}, {angularVelocity[0], angularVelocity[1], angularVelocity[2]}, {torque[0], torque[1], torque[2]}, momentOfInertia});
     }
 
-    // generate stars
+    // Generate stars
     for (int i = 0; i < numStars; ++i) {
         double position[3];
-        double distance = randomInRange(0, radius);
-        double angle = randomInRange(0, 2 * M_PI);
-        position[0] = center[0] + distance * cos(angle);
-        position[1] = center[1] + distance * sin(angle);
-        position[2] = center[2] + randomInRange(-radius, radius);
+        generateSpiralPosition(position, center, radius, radius * 0.1, numArms);
 
         double velocity[3] = {0.0, 0.0, 0.0};
         double force[3] = {0.0, 0.0, 0.0};
@@ -165,17 +190,72 @@ void generate_galaxy(std::vector<PointMass>& masses, int numPlanets, int numStar
         masses.push_back(PointMass{mass, {position[0], position[1], position[2]}, {velocity[0], velocity[1], velocity[2]}, {force[0], force[1], force[2]}, {angularVelocity[0], angularVelocity[1]}, {torque[0], torque[1], torque[2]}, momentOfInertia});
     }
 
-    double averageMass = totalMass / totalBodies;
+    // Generate small black holes
+    for (int i = 0; i < numSmallBlackHoles; ++i) {
+        double position[3];
+        generateSpiralPosition(position, center, radius, radius * 0.1, numArms);
 
-    // set stable orbital velocitys
+        double velocity[3] = {0.0, 0.0, 0.0};
+        double force[3] = {0.0, 0.0, 0.0};
+        double angularVelocity[3] = {0.0, 0.0, 0.0};
+        double torque[3] = {0.0, 0.0, 0.0};
+        double momentOfInertia = randomInRange(1e20, 1e30);
+
+        mass = randomInRange(1000 * mass_min, 15000 * mass_max);
+        totalMass += mass;
+
+        masses.push_back(PointMass{mass, {position[0], position[1], position[2]}, {velocity[0], velocity[1], velocity[2]}, {force[0], force[1], force[2]}, {angularVelocity[0], angularVelocity[1]}, {torque[0], torque[1], torque[2]}, momentOfInertia});
+    }
+
+    // Calculate center of mass without the massive black holes
+    double centerOfMass[3] = {0.0, 0.0, 0.0};
+    double totalMassForCenter = 0.0;
+
+    for (int i = startIdx; i < startIdx + totalBodies; ++i) {
+        centerOfMass[0] += masses[i].position[0] * masses[i].mass;
+        centerOfMass[1] += masses[i].position[1] * masses[i].mass;
+        centerOfMass[2] += masses[i].position[2] * masses[i].mass;
+        totalMassForCenter += masses[i].mass;
+    }
+
+    // Calculate center of mass position
+    centerOfMass[0] /= totalMassForCenter;
+    centerOfMass[1] /= totalMassForCenter;
+    centerOfMass[2] /= totalMassForCenter;
+
+    // Calculate the total mass including the massive black holes
+    double totalMassIncludingBH = totalMassForCenter;
+
+    // Generate massive black holes without orbital velocities
+    for (int i = 0; i < numBlackHoles; ++i) {
+        double position[3];
+        double distance = randomInRange(0, 0.2 * radius);
+        double angle = randomInRange(0, 2 * M_PI);
+        position[0] = center[0] + distance * cos(angle);
+        position[1] = center[1] + distance * sin(angle);
+        position[2] = center[2] + randomInRange(-0.1 * radius, 0.1 * radius);
+
+        double velocity[3] = {0.0, 0.0, 0.0};
+        double force[3] = {0.0, 0.0, 0.0};
+        double angularVelocity[3] = {0.0, 0.0, 0.0};
+        double torque[3] = {0.0, 0.0, 0.0};
+        double momentOfInertia = randomInRange(1e20, 1e30);
+
+        mass = randomInRange(1000000 * mass_min, 15000000 * mass_max);
+        totalMassIncludingBH += mass;
+
+        masses.push_back(PointMass{mass, {position[0], position[1], position[2]}, {velocity[0], velocity[1], velocity[2]}, {force[0], force[1], force[2]}, {angularVelocity[0], angularVelocity[1]}, {torque[0], torque[1], torque[2]}, momentOfInertia});
+    }
+
+    // Set stable orbital velocities for other bodies
     for (int i = startIdx; i < startIdx + totalBodies; ++i) {
         auto& mass = masses[i];
-        double dx = mass.position[0] - center[0];
-        double dy = mass.position[1] - center[1];
-        double dz = mass.position[2] - center[2];
+        double dx = mass.position[0] - centerOfMass[0];
+        double dy = mass.position[1] - centerOfMass[1];
+        double dz = mass.position[2] - centerOfMass[2];
         double distance = sqrt(dx * dx + dy * dy + dz * dz);
 
-        double orbitalVelocity = sqrt(G * averageMass / distance);
+        double orbitalVelocity = sqrt(G * totalMassIncludingBH / distance);
 
         double angle = randomInRange(0, 2 * M_PI);
         double sinAngle = sin(angle);
@@ -214,25 +294,26 @@ int main() {
     srand(static_cast<unsigned int>(time(NULL)));
 
     double randsize_min = 1.0e23, randsize_max = 1.0e30;
-    double galaxyRadius = 24.0e14;
+    double galaxyRadius = 35.0e14;
+    int numArms = 4;
 
     std::vector<PointMass> masses;
     double galaxyCenter1[3] = {0.0, 0.0, 0.0};
-    double galaxyCenter2[3] = {70.0e14, 0.0, 0.0};
+    double galaxyCenter2[3] = {140.0e14, 0.0, 0.0};
 
-    double initialVelocity1[3] = {90000.0, 0.0, 0.0};
-    double initialVelocity2[3] = {-80000.0, 0.0, 0.0};
+    double initialVelocity1[3] = {100000.0, 0.0, 0.0};
+    double initialVelocity2[3] = {-100000.0, 0.0, 0.0};
 
-    generate_galaxy(masses, NUMPLANETS, NUMSTARS, galaxyCenter1, galaxyRadius, randsize_min, randsize_max, initialVelocity1);
-    generate_galaxy(masses, NUMPLANETS, NUMSTARS, galaxyCenter2, galaxyRadius, randsize_min, randsize_max, initialVelocity2);
+    generate_galaxy(masses, NUMPLANETS, NUMSTARS, NUMBLACKHOLES, NUMSMALLBLACKHOLES, galaxyCenter1, galaxyRadius, randsize_min, randsize_max,  numArms, initialVelocity1);
+    generate_galaxy(masses, NUMPLANETS, NUMSTARS, NUMBLACKHOLES, NUMSMALLBLACKHOLES, galaxyCenter2, galaxyRadius, randsize_min, randsize_max,  numArms, initialVelocity2);
 
 
     PointMass *d_masses;
     cudaMalloc(&d_masses, masses.size() * sizeof(PointMass));
     cudaMemcpy(d_masses, masses.data(), masses.size() * sizeof(PointMass), cudaMemcpyHostToDevice);
 
-    double dt = 7000000;//.0001;//5;//100;//10000;//
-    int steps = 100;
+    double dt = 4000000;//.0001;//5;//100;//10000;//
+    int steps = 300;
     int numThreads = 256;
     int numBlocks = (masses.size() + numThreads - 1) / numThreads;
 
