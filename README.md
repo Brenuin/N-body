@@ -1,6 +1,6 @@
 # N-body Simulation
 
-![N-body Simulation](media/Untitled video - Made with Clipchamp (3).gif)
+![N-body Simulation](media/Untitled%20video%20-%20Made%20with%20Clipchamp%20(3).gif)
 
 ## Overview
 
@@ -30,7 +30,7 @@ The simulation results are visualized using VisPy, providing a detailed view of 
 
 You can customize the simulation by changing parameters such as the number of stars, black holes, radius, planets, and time directly in the `build.bat` file. Keep in mind that increasing the number of planets significantly impacts the computation time, as it grows quadratically with the number of bodies (`O(N^2)`) and linearly with the time steps (`O(N)`).
 
-![Changing Parameters in build.bat](media/changeBuildParameters.png)
+![Changing Parameters in build.bat](media/buildoptions.png)
 
 ### Customizing the Visualizer
 
