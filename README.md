@@ -1,6 +1,6 @@
 # N-body Simulation
 
-![N-body Simulation](media/Untitled%20video%20-%20Made%20with%20Clipchamp%20(3).mp4)
+![N-body Simulation](media/Untitled video - Made with Clipchamp (3).gif)
 
 ## Overview
 
